@@ -56,17 +56,10 @@ RUN apt-get update && \
 
 ENV PATH="/root/miniconda3/bin:$PATH"
 ENV LD_LIBRARY_PATH="/root/miniconda3/lib:$LD_LIBRARY_PATH"
-COPY environment.yml environment.yml
 
-RUN conda create -y --name $CONDA_ENV && \
-    conda init bash && \
-    # replace channel to nigtly if neede, fix PT version and remove Horovod as it will be installe later
-    python -c "import re ; fname = 'environment.yml' ; req = re.sub(r'python>=[\d\.]+', 'python=${PYTHON_VERSION}', open(fname).read()) ; open(fname, 'w').write(req)" && \
-    python -c "fname = 'environment.yml' ; req = open(fname).readlines() ; open(fname, 'w').writelines([ln for ln in req if not any(n in ln for n in ['pytorch>', 'horovod'])])" && \
-    cat environment.yml && \
-    conda env update --file environment.yml && \
-    conda clean -ya && \
-    rm environment.yml
+# this pretty much just to install required python version
+RUN conda create -y --name $CONDA_ENV "python=${PYTHON_VERSION}" && \
+    conda init bash
 
 ENV PATH /root/miniconda3/envs/${CONDA_ENV}/bin:$PATH
 ENV LD_LIBRARY_PATH="/root/miniconda3/envs/${CONDA_ENV}/lib:$LD_LIBRARY_PATH"

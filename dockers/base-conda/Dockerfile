@@ -28,42 +28,37 @@ FROM nvidia/cuda:${CUDA_VERSION}-cudnn${CUDNN_VERSION}-devel-ubuntu18.04
 
 ARG PYTHON_VERSION=3.7
 ARG PYTORCH_VERSION=1.6
+ARG PYTORCH_CHANNEL=pytorch
+ARG CONDA_VERSION=4.7.12
 
 SHELL ["/bin/bash", "-c"]
-# https://techoverflow.net/2019/05/18/how-to-fix-configuring-tzdata-interactive-input-when-building-docker-images/
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Europe/Prague
 
 ENV PATH="$PATH:/root/.local/bin"
-ENV CUDA_TOOLKIT_ROOT_DIR="/usr/local/cuda"
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
-        pkg-config \
         cmake \
         git \
-        wget \
+        curl \
         ca-certificates \
-        software-properties-common \
     && \
 
-# Install python
-    add-apt-repository ppa:deadsnakes/ppa && \
-    apt-get install -y \
-        python${PYTHON_VERSION} \
-        python${PYTHON_VERSION}-distutils \
-        python${PYTHON_VERSION}-dev \
-    && \
-
-    update-alternatives --install /usr/bin/python${PYTHON_VERSION%%.*} python${PYTHON_VERSION%%.*} /usr/bin/python${PYTHON_VERSION} 1 && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 && \
+# Install conda and python.
+# NOTE new Conda does not forward the exit status... https://github.com/conda/conda/issues/8385
+    curl -o ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}-Linux-x86_64.sh  && \
+    chmod +x ~/miniconda.sh && \
+    ~/miniconda.sh -b && \
+    rm ~/miniconda.sh && \
 
 # Cleaning
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /root/.cache && \
     rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/root/miniconda3/bin:$PATH"
+ENV LD_LIBRARY_PATH="/root/miniconda3/lib:$LD_LIBRARY_PATH"
+ENV CUDA_TOOLKIT_ROOT_DIR="/usr/local/cuda"
 
 ENV HOROVOD_GPU_OPERATIONS=NCCL
 ENV HOROVOD_WITH_PYTORCH=1
@@ -73,36 +68,51 @@ ENV HOROVOD_WITH_GLOO=1
 ENV HOROVOD_WITHOUT_MPI=1
 #ENV MAKEFLAGS="-j$(nproc)"
 ENV MAKEFLAGS="-j1"
-ENV TORCH_CUDA_ARCH_LIST="compute capability"
-#ENV TORCH_CUDA_ARCH_LIST=Volta;Turing;Kepler+Tesla
 
-COPY ./requirements.txt requirements.txt
-COPY ./requirements/ ./requirements/
+ENV CONDA_ENV=lightning
+COPY environment.yml environment.yml
 
 # conda init
-RUN \
-    wget https://bootstrap.pypa.io/get-pip.py --progress=bar:force:noscroll --no-check-certificate && \
-    python${PYTHON_VERSION} get-pip.py && \
-    rm get-pip.py && \
+RUN conda create -y --name $CONDA_ENV && \
+    conda init bash && \
+    # NOTE: this requires that the channel is presented in the yaml before packages
+    # replace channel to nigtly if needed, fix PT version and remove Horovod as it will be installe later
+    python -c "fname = 'environment.yml' ; req = open(fname).read().replace('pytorch', '${PYTORCH_CHANNEL}', 1) ; open(fname, 'w').write(req)" && \
+    python -c "import re ; fname = 'environment.yml' ; req = re.sub(r'python[>=]+[\d\.]+', 'python=${PYTHON_VERSION}', open(fname).read()) ; open(fname, 'w').write(req)" && \
+    python -c "import re ; fname = 'environment.yml' ; req = re.sub(r'torch[>=]+[\d\.]+', 'torch=${PYTORCH_VERSION}', open(fname).read()) ; open(fname, 'w').write(req)" && \
+    python -c "fname = 'environment.yml' ; req = open(fname).readlines() ; open(fname, 'w').writelines([ln for ln in req if 'horovod' not in ln])" && \
+    cat environment.yml && \
+    conda env update --file environment.yml && \
+    conda clean -ya && \
+    rm environment.yml
 
+ENV PATH /root/miniconda3/envs/${CONDA_ENV}/bin:$PATH
+ENV LD_LIBRARY_PATH="/root/miniconda3/envs/${CONDA_ENV}/lib:$LD_LIBRARY_PATH"
+# if you want this environment to be the default one, uncomment the following line:
+ENV CONDA_DEFAULT_ENV=${CONDA_ENV}
+
+COPY ./requirements/extra.txt requirements-extra.txt
+COPY ./requirements/test.txt requirements-test.txt
+
+RUN \
     # Disable cache
     pip config set global.cache-dir false && \
-    # eventualy use pre-release
-    pip install "torch==${PYTORCH_VERSION}.*" --pre && \
-    # set particular PyTorch version
-    python -c "import re ; fname = 'requirements.txt' ; req = re.sub(r'torch[>=]+[\d\.]+', 'torch==${PYTORCH_VERSION}.*', open(fname).read()) ; open(fname, 'w').write(req)" && \
-
-    # Install all requirements
-    pip install -r requirements/devel.txt --upgrade-strategy only-if-needed --use-feature=2020-resolver && \
-    rm -rf requirements* && \
+    #echo ". ${WORKDIR}/miniconda/etc/profile.d/conda.sh" >> ~/.bashrc && \
+    #echo "conda activate ${CONDA_ENV}" >> ~/.bashrc && \
+    #source ~/.bashrc && \
     # install NVIDIA AMP
     git clone https://github.com/NVIDIA/apex && \
     pip install --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./apex && \
-    rm -rf apex
+    rm -rf apex && \
+    # Install remaining requirements
+    pip install -r requirements-extra.txt --upgrade-strategy only-if-needed && \
+    pip install -r requirements-test.txt --upgrade-strategy only-if-needed && \
+    rm requirements*
 
 RUN \
     # Show what we have
     pip --version && \
+    conda info && \
     pip list && \
     python -c "import sys; assert sys.version[:3] == '$PYTHON_VERSION', sys.version" && \
     python -c "import torch; assert torch.__version__[:3] == '$PYTORCH_VERSION', torch.__version__"
