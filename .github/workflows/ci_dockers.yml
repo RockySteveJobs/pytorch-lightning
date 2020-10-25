@@ -9,7 +9,7 @@ on:  # Trigger the workflow on push or pull request, but only for the master bra
     branches: [master]
 
 jobs:
-  build-Conda:
+  build-PL:
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -55,15 +55,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          #- python_version: 3.7
-          #  pytorch_version: 1.8  # todo
-          #  pytorch_channel: pytorch-nightly
           - python_version: 3.8
             pytorch_version: 1.6
-            pytorch_channel: pytorch
           - python_version: 3.6
             pytorch_version: 1.5
-            pytorch_channel: pytorch
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -73,6 +68,34 @@ jobs:
         uses: docker/build-push-action@v1.1.0
         with:
           dockerfile: dockers/base-cuda/Dockerfile
+          build_args: PYTHON_VERSION=${{ matrix.python_version }},PYTORCH_VERSION=${{ matrix.pytorch_version }}
+          push: false
+        timeout-minutes: 50
+
+  build-conda:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python_version: 3.8
+            pytorch_version: 1.6
+            pytorch_channel: pytorch
+          - python_version: 3.6
+            pytorch_version: 1.5
+            pytorch_channel: pytorch
+          #- python_version: 3.7
+          #  pytorch_version: 1.8  # todo
+          #  pytorch_channel: pytorch-nightly
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Build Docker
+        # publish master
+        uses: docker/build-push-action@v1.1.0
+        with:
+          dockerfile: dockers/base-conda/Dockerfile
           build_args: PYTHON_VERSION=${{ matrix.python_version }},PYTORCH_VERSION=${{ matrix.pytorch_version }},PYTORCH_CHANNEL=${{ matrix.pytorch_channel }}
           push: false
         timeout-minutes: 50
