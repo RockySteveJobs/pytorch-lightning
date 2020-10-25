@@ -15,7 +15,7 @@
 ARG PYTHON_VERSION=3.7
 ARG PYTORCH_VERSION=1.5
 
-FROM pytorchlightning/pytorch_lightning:base-conda-py${PYTHON_VERSION}-torch${PYTORCH_VERSION}
+FROM pytorchlightning/pytorch_lightning:base-cuda-py${PYTHON_VERSION}-torch${PYTORCH_VERSION}
 
 MAINTAINER PyTorchLightning <https://github.com/PyTorchLightning>
 

@@ -117,7 +117,7 @@ jobs:
           repository: pytorchlightning/pytorch_lightning
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          dockerfile: dockers/conda/Dockerfile
-          build_args: PYTHON_VERSION=${{ matrix.python_version }},PYTORCH_VERSION=${{ matrix.pytorch_version }}
+          dockerfile: dockers/base-conda/Dockerfile
+          build_args: PYTHON_VERSION=${{ matrix.python_version }},PYTORCH_VERSION=${{ matrix.pytorch_version }},PYTORCH_CHANNEL=${{ matrix.pytorch_channel }}
           tags: "base-conda-py${{ matrix.python_version }}-torch${{ matrix.pytorch_version }}"
         timeout-minutes: 55

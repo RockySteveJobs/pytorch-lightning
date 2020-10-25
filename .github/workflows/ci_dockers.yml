@@ -24,7 +24,7 @@ jobs:
         # publish master
         uses: docker/build-push-action@v1.1.0
         with:
-          dockerfile: dockers/conda/Dockerfile
+          dockerfile: dockers/release/Dockerfile
           build_args: PYTHON_VERSION=${{ matrix.python_version }},PYTORCH_VERSION=${{ matrix.pytorch_version }}
           push: false
         timeout-minutes: 50
